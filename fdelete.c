@@ -8,6 +8,7 @@
  * Display File byte by byte: od -c -b filename
  */
 
+#include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
 #include "fdelete.h"

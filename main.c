@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <errno.h>
 #include "fdelete.h"
 
 int main(int argc, char** argv) {
@@ -15,9 +16,8 @@ int main(int argc, char** argv) {
 	}
 	
 	char line[256];
-	//fscanf(fp, "%[^\n]%*c", line);
 	
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 2; i++) // ignoring first 2 chars and setting file position to 3rd byte/char
 		fgetc(fp);
 
 	int bytes;
