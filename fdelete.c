@@ -1,93 +1,51 @@
 /*
- * TODO - Future Scope - Delete Multiple Lines => Delete from byte number x to byte number y => write fmodify()
- * The OS doesn't give us an option of deleting a specific line/part from a file
- * This code attempts to write a function for this purpose
- * If this code is a success, then try to Post this answer on Stack overflow for the question of can I delete from a text file
+ * TODO - write fmodify()
+ * C gives us fscanf(), fprintf(), fread(), fwrite() but doesn't provide any function for deleting specific part of a file
+ * fdelete() is the function for this purpose.
+ *
  * man 2 truncate
+ * The function fileno() returns the file descriptor associated with an open FILE *.
+ * Display File byte by byte: od -c -b filename
  */
 
-#include <stdio.h>
-#include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <sys/types.h>
-
-int fdelete(char* filename, int delNum); // delNum indicates line number to be deleted
-
-int main(int argc, char** argv) {
-
-	if (argc == 1) {
-		printf("usage: ./a.out <filename>\n");
-		return EINVAL;
-	}
-
-	int delNum;
-	printf("Enter line to be deleted: ");
-	scanf("%d", &delNum);
-	
-	int ret = fdelete(argv[1], delNum);
-	if (ret != 0) {
-		perror("");
-		return ret;
-	}
-
-	return 0;
-}
-
+#include "fdelete.h"
 
 /*
- * returns errno in case of error
- * returns 0 for success
+ * Documentation:
+ * Description: fdelete() deletes 'bytes' bytes of data from the stream pointed to by fp. bytes will be deleted from the CURRENT FILE POSITION.
+ * 		Please be aware that \n and \t are also bytes. Include them in 'bytes' if you want to delete them too.
+ * 		File must be opened in read + write mode while passing file pointer to this function.
+ * 		File position before calling the function and after the function returns will be the same.
+ * Return Values: returns 0 on success and errno on failure. Kindly use perror("") to print error if non-0 return value returned.
+ * Logic: Shift all bytes from (current_file_position + number_of_bytes_to_be_deleted) to (current_file_position) and in the end truncate the file
  */
-int fdelete(char* filename, int delNum) { // TODO - NEXT CHALLENGE IS TO DELETE MULTIPLE LINES, BEWARE OF CONSECUTIVE LINES
-	FILE* fp = fopen(filename, "r+"); // open the file
-	if (!fp)
-		return errno;
-
-	char line[256]; // to hold one line of file at a time
-	int lineNum = 1, delete = 0, deleteFoundRightNow = 0;
-	long filePosRead = ftell(fp), filePosWrite = ftell(fp); // filePosRead will hold the file position from which next read has to be performed and filePosWrite holds the file position from where next write has to be performed
-
-	while (fscanf(fp, "%[^\n]%*c", line) != EOF) {
-		//printf("line = %s\n", line);
-		filePosRead = ftell(fp); // modify filePosRead bcoz we have read just now
-		if (lineNum == delNum) { // if line to be deleted found
-			delete = 1;
-			deleteFoundRightNow = 1;
-		}
-		if (delete) {
-			if (deleteFoundRightNow) { // read the next line only if delete is found right now. This is becoz we want to replace the line to be deleted by the next line
-				if (fscanf(fp, "%[^\n]%*c", line) == EOF)
-					break;
-				lineNum++; // IMP - there is a problem that consecutive lines cannot be deleted
-				deleteFoundRightNow = 0;
-				filePosRead = ftell(fp); // store the file position in filePosRead bcoz we have read one more line right now
-			}
-			
-			// if delete is not found right now, then we just simply write the line read to filePosWrite. We don't have to read next line in this case
-
-			fseek(fp, filePosWrite, SEEK_SET); // set file position for writing
-			fprintf(fp, "%s\n", line);
-			filePosWrite = ftell(fp); // modify filePosWrite bcoz we have written right now
-		} else {
-			filePosWrite = ftell(fp); // update the filePosWrite to go to next line
-		}
-		lineNum++;
-		fseek(fp, filePosRead, SEEK_SET); // set file position to filePosRead becoz we are going to read from file
+int fdelete(FILE* fp, int bytes) {
+	
+	// to store each byte/char from file
+	char byte;
+	long readPos = ftell(fp) + bytes, writePos = ftell(fp), startingPos = writePos;
+	// start reading from the position which comes after the bytes to be deleted
+	fseek(fp, readPos, SEEK_SET);
+	while (fread(&byte, sizeof(byte), 1, fp)) {
+		// modify readPos as we have read right now
+		readPos = ftell(fp);
+		// set file position to writePos as we are going to write now
+		fseek(fp, writePos, SEEK_SET);
+		
+		// if file doesn't have write permission
+		if (fwrite(&byte, sizeof(byte), 1, fp) == 0) 
+			return errno;
+		// modify writePos as we have written right now
+		writePos = ftell(fp);
+		// set file position for reading
+		fseek(fp, readPos, SEEK_SET);
 	}
-	
-	//printf("delete = %d\nline = %s\n", delete, line);
-	/*if (delete) { // after EOF, the last line will be unprocessed.
-		//filePosRead = ftell(fp);
-		fseek(fp, filePosWrite, SEEK_SET);
-		fprintf(fp, "%s\n", line);
-		//filePosWrite = ftell(fp);
-	}*/
 
-
-	fclose(fp);
-	
-	truncate(filename, filePosWrite); // truncate the file size to filePosWrite
-
+	// truncate file size to remove the unnecessary ending bytes
+	ftruncate(fileno(fp), writePos);
+	// reset file position to the same position that we got when function was called.
+	fseek(fp, startingPos, SEEK_SET); 
 	return 0;
 }
